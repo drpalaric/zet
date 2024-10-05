@@ -28,14 +28,14 @@ x.help()
 ############################################################
 
 
-ZETDIR="$HOME/code/zet/"
+ZETDIR="$HOME/Project/zet/"
 
 x.push_zet() {
   # Commit to git
   cd $ZETDIR
   git add .
   git commit -m "added new zet"  
-  git push origin -u master 
+  git push origin -u main 
 }
 
 x.gen_zet() {
