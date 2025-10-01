@@ -4,21 +4,21 @@
 # Help                                                     #
 ############################################################
 
-x.help()
-{
-  # Display Help
-  echo "This is the Zettelkästen script I use to generate Zettel."
-  echo "Syntax: zet [-g|h|p]"
-  echo "options:"
-  echo "g     Generate a new Zettel" # should have its own directory 
-  echo "h     Display this help"
-  echo "p     Push Zettel to Github"
-  echo "l     List all the Zettle in the /zet directory" # show filename and first few characters
-  echo "r     Read a Zettel"
-  echo "d     Delete a Zettel" # should be able to remove a Zettel by filename
-  echo "s     Search for a Zettel" # should be a regex search inside all the Zettel
-  echo "o     Open/View a Zettel" # should be able to select a Zettel to open
-  echo
+function display_help() {
+  echo "Usage: $0 [options]"
+  echo "Options:"
+    echo "  -h        Show help"
+    echo "  -c        Copy (functionality not implemented)"
+    echo "  -e        List environment variables"
+    echo "  -g        Generate Zettel"
+    echo "  -p        Push Zettel to GitHub"
+    echo "  -l        List Zettels"
+    echo "  -r        Read file contents"
+    echo "  -d        Delete Zettel"
+    echo "  -s <arg>  Search Zettel"
+    echo "  -o        Open Zettel"
+    echo "  -t        Read tags from all Zettels"
+    echo "  --st      Search tags"
 }
 
 ############################################################
@@ -28,9 +28,85 @@ x.help()
 ############################################################
 
 
-ZETDIR="$HOME/Project/zet/"
+ZETDIR="$HOME/Projects/zet/"
 
-x.push_zet() {
+function main() {
+    local OPTIND option
+
+    while getopts ":hcegplrs:o:td" option; do
+        case $option in
+            h)
+                display_help
+                exit 0
+                ;;
+            c)
+                # Placeholder for copy functionality
+                exit 0
+                ;;
+            e)
+                list_env
+                exit 0
+                ;;
+            g)
+                gen_zet
+                exit 0
+                ;;
+            p)
+                push_zet
+                exit 0
+                ;;
+            l)
+                list_zet
+                exit 0
+                ;;
+            r)
+                read_file_contents
+                exit 0
+                ;;
+            d)
+                delete_zet
+                exit 0
+                ;;
+            s)
+                search_zet "$OPTARG"
+                exit 0
+                ;;
+            o)
+                open_zet
+                exit 0
+                ;;
+            t)
+                read_tags
+                exit 0
+                ;;
+            \?)
+                echo "Unknown option: -$OPTARG" >&2
+                display_help >&2
+                exit 1
+                ;;
+        esac
+    done
+
+    shift $((OPTIND -1))
+
+    # Handle long options manually after getopts processing if needed.
+    for arg in "$@"; do
+        case $arg in
+            --st)
+                search_tags
+                exit 0
+                ;;
+            *)
+                echo "Unknown option: $arg" >&2
+                display_help >&2
+                exit 1
+                ;;
+        esac
+    done
+
+}
+
+function push_zet() {
   # Commit to git
   cd $ZETDIR
   git add .
@@ -38,7 +114,7 @@ x.push_zet() {
   git push origin -u main 
 }
 
-x.gen_zet() {
+function gen_zet() {
   # Generate a new Zettel
   local today=$(date +%Y%m%d)
   local randnum=$(date +%s)
@@ -46,17 +122,17 @@ x.gen_zet() {
   vim README.md
 }
 
-x.open_zet() {
+function open_zet() {
   # Open a Zettel
   select zet in $(basename $ZETDIR*); do
-    if [ -n $zet ]; then
+    if [ -n "$zet" ]; then
       cd $zet && vim README.md
       break
     fi
   done
 }
 
-x.delete_zet()  {
+function delete_zet()  {
   # Delete a Zettel
   echo "Which nasty little Zettel do you want to get rid of?"
   select zet in $(basename $ZETDIR*); do
@@ -68,20 +144,46 @@ x.delete_zet()  {
   done
 }
 
-x.list_zet() { 
+function list_zet() { 
 # List all the Zettel in the /zet directory
- stat -f "%Sm %N" $ZETDIR* 
-#  | basename -s md | sort -rn
+  stat -f "%Sm %N" $ZETDIR* | ls -F | grep '/$'
 }
 
-x.read_tags() {
+function list_repo() {
+  # List the environment variables like the Github account and repo to select
+  git remote -v | awk '{print $2}' | awk -F'[:/]' '{print $2}' 
+    repo_name=$(basename "$repo_url")
+    echo "Git Repo: $repo_name"
+  env | grep -i 'pwd'
+}
+
+function read_tags() {
+  TEMP_FILE=$(mktemp)
   # read tags from all files
-  for f in $ZETDIR*; do
-    echo $(basename $f):$(awk '/Tags/{y=1;next}y' $f) | column -t -s ":"
+  find . -type f -name "*.md" | while read -r FILE; do
+    grep -o '\#[a-zA-Z0-9_]\+' "$FILE" >> "$TEMP_FILE"
   done
+
+  sort "$TEMP_FILE" | uniq -c | sort -nr > "$TEMP_FILE.sorted"
+
+  echo "Hashtags found:"
+  cat "$TEMP_FILE.sorted"
+
+  rm "$TEMP_FILE"
 }
 
-x.read_file_contents() {
+function search_tags() {
+  echo "Enter the tag you'd like to search for:"
+  read TAG
+  echo "Directories containing #$TAG:"
+  find . -type f -name "*.md" | while read -r FILE; do
+    if grep -q "\#$TAG" "$FILE"; then
+      direname "$FILE"
+    fi
+  done | sort | uniq
+}
+
+function read_file_contents() {
   # read a file before editing
   # check if we're in a directory, if not, then read the README.md file
   # if you're in a directory, then read the README.md file in that directory
@@ -96,64 +198,11 @@ x.read_file_contents() {
   done
 }
 
-x.search_zet() {
+function search_zet() {
   # Search for a Zettel
   search_term=$1
   echo $(grep -ril --color=always  "$search_term" $ZETDIR*)
 }
-
-# Add the options
-while getopts ":hcgplrsotd" option; do 
-  case $option in
-    h)
-      x.help
-      exit 0
-      ;;
-    c)
-      # copy?
-      exit 0
-      ;;
-    g)
-      x.gen_zet
-      exit 0
-      ;;
-    p)
-      echo "Pushing Zettel to Github"
-      x.push_zet
-      exit 0
-      ;;
-    l)
-      x.list_zet
-      exit 0
-      ;;
-    r)
-      x.read_file_contents
-      exit 0
-      ;;   
-    d)
-      x.delete_zet
-      exit 0
-      ;;
-    s)
-      x.search_zet $2
-      exit 0
-      ;;
-    o)
-      x.open_zet
-      exit 0
-      ;;
-    t) 
-      echo "Reading tags from all Zettels"
-      echo ------------
-      x.read_tags
-      exit 0
-      ;;
-    \?)
-      echo "Unknown option: $option"
-      exit 1
-      ;;
-  esac
-done
 
 ############################################################
 ############################################################
